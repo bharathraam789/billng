@@ -99,13 +99,57 @@
     showStatus("Add your Supabase Project URL and publishable key in the code.");
   }
 
-  async function loadPrices() {
-    if (!client) return;
-    const { data, error } = await client
-      .from("collection_service_prices")
-      .select("service_code, service_name, monthly_fee")
-      .eq("active", true)
-      .order("service_code");
+  
+async function loadPrices() {
+  if (!client) {
+    showStatus("Supabase connection is not configured.");
+    return;
+  }
+
+  showStatus("Checking saved prices...");
+
+  const { data, error } = await client
+    .from("collection_service_prices")
+    .select("service_code, service_name, monthly_fee")
+    .eq("active", true)
+    .order("service_code");
+
+  if (error) {
+    console.error("Price loading error:", error);
+    showStatus("Price loading failed: " + error.message);
+    return;
+  }
+
+  const prices = document.getElementById("prices");
+  prices.replaceChildren();
+
+  if (!data || data.length === 0) {
+    showStatus("No active prices found in Supabase.");
+    return;
+  }
+
+  for (const item of data) {
+    const card = document.createElement("div");
+    card.className = "price";
+
+    const name = document.createElement("strong");
+    name.textContent = item.service_name;
+
+    const amount = document.createElement("div");
+    amount.className = "amount";
+    amount.textContent = Number(item.monthly_fee).toLocaleString("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 2
+    });
+
+    card.append(name, amount);
+    prices.append(card);
+  }
+
+  showStatus("Success! Loaded " + data.length + " prices from Supabase.");
+}
+
 
     if (error) {
       showStatus("Could not load prices. Check your sign-in and price-table policies.");
