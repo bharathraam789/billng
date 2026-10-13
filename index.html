@@ -1,1 +1,187 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>THE ARROW LINK | Daily Collection</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: Arial, sans-serif;
+      background: #f4f6fa; color: #172033;
+    }
+    header {
+      background: #18263d; color: white;
+      padding: 20px; text-align: center;
+    }
+    main { max-width: 900px; margin: 25px auto; padding: 16px; }
+    .card {
+      background: white; padding: 22px; margin-bottom: 18px;
+      border-radius: 12px; box-shadow: 0 3px 15px #0000000c;
+    }
+    input, button {
+      width: 100%; padding: 12px; margin-top: 10px;
+      border-radius: 7px; font-size: 15px;
+    }
+    input { border: 1px solid #ccd3df; }
+    button {
+      border: 0; background: #9b7138; color: white;
+      font-weight: bold; cursor: pointer;
+    }
+    .prices { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .price { background: #f7f0e5; padding: 18px; border-radius: 9px; }
+    .amount { font-size: 26px; font-weight: bold; }
+    #app, #status { display: none; }
+    #status { padding: 12px; border-radius: 7px; background: #fff1d6; }
+    @media(max-width: 560px) { .prices { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>THE ARROW LINK</h1>
+  <p>Daily Collection Management</p>
+</header>
+
+<main>
+  <div class="card" id="login">
+    <h2>Team Login</h2>
+    <p>Sign in with your registered team email.</p>
+    <input id="email" type="email" placeholder="Email address" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="loginBtn">Sign In</button>
+    <button id="resetBtn" type="button">Forgot password?</button>
+  </div>
+
+  <div id="status" role="status"></div>
+
+  <section id="app">
+    <div class="card">
+      <h2>Collection Dashboard</h2>
+      <p id="userEmail"></p>
+      <button id="refreshBtn">Refresh Prices</button>
+      <button id="logoutBtn">Sign Out</button>
+    </div>
+
+    <div class="card">
+      <h2>Monthly Service Prices</h2>
+      <div class="prices" id="prices">
+        <div class="price">Cable TV <div class="amount">₹350</div></div>
+        <div class="price">Internet <div class="amount">₹599</div></div>
+      </div>
+      <p>These are starter display values. The app will load the saved prices after sign-in.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+  const SUPABASE_URL = "PASTE_YOUR_PROJECT_URL_HERE";
+  const SUPABASE_PUBLISHABLE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
+
+  const statusBox = document.getElementById("status");
+  const showStatus = (message) => {
+    statusBox.textContent = message;
+    statusBox.style.display = "block";
+  };
+
+  let client = null;
+
+  if (
+    SUPABASE_URL.startsWith("https://") &&
+    SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") &&
+    window.supabase
+  ) {
+    client = window.supabase.createClient(
+      SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
+    );
+  } else {
+    showStatus("Add your Supabase Project URL and publishable key in the code.");
+  }
+
+  async function loadPrices() {
+    if (!client) return;
+    const { data, error } = await client
+      .from("collection_service_prices")
+      .select("service_code, service_name, monthly_fee")
+      .eq("active", true)
+      .order("service_code");
+
+    if (error) {
+      showStatus("Could not load prices. Check your sign-in and price-table policies.");
+      console.error(error);
+      return;
+    }
+
+    const prices = document.getElementById("prices");
+    prices.replaceChildren();
+
+    for (const item of data) {
+      const card = document.createElement("div");
+      card.className = "price";
+      const name = document.createElement("strong");
+      name.textContent = item.service_name;
+      const amount = document.createElement("div");
+      amount.className = "amount";
+      amount.textContent = Number(item.monthly_fee).toLocaleString("en-IN", {
+        style: "currency", currency: "INR", maximumFractionDigits: 2
+      });
+      card.append(name, amount);
+      prices.append(card);
+    }
+  }
+
+  async function showSession(session) {
+    const loggedIn = Boolean(session);
+    document.getElementById("login").style.display = loggedIn ? "none" : "block";
+    document.getElementById("app").style.display = loggedIn ? "block" : "none";
+    statusBox.style.display = "none";
+
+    if (loggedIn) {
+      document.getElementById("userEmail").textContent =
+        "Signed in: " + (session.user.email || "");
+      await loadPrices();
+    }
+  }
+
+  document.getElementById("loginBtn").onclick = async () => {
+    if (!client) return showStatus("Please configure the Supabase connection first.");
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!email || !password) return showStatus("Enter your email and password.");
+
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) return showStatus("Sign-in failed: " + error.message);
+    await showSession(data.session);
+  };
+
+  document.getElementById("resetBtn").onclick = async () => {
+    if (!client) return showStatus("Please configure the Supabase connection first.");
+    const email = document.getElementById("email").value.trim();
+    if (!email) return showStatus("Enter your email first.");
+
+    const { error } = await client.auth.resetPasswordForEmail(email);
+    showStatus(error ? error.message : "If the email is registered, a reset link will be sent.");
+  };
+
+  document.getElementById("refreshBtn").onclick = loadPrices;
+
+  document.getElementById("logoutBtn").onclick = async () => {
+    if (!client) return;
+    const { error } = await client.auth.signOut();
+    if (error) return showStatus(error.message);
+    await showSession(null);
+  };
+
+  if (client) {
+    client.auth.onAuthStateChange((_event, session) => {
+      showSession(session);
+    });
+    client.auth.getSession().then(({ data }) => showSession(data.session));
+  }
+</script>
+</body>
+</html>
+
